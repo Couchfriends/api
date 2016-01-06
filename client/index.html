@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <script src="../shared/couchfriends.js"></script>
+</head>
+<body>
+<h1>Client tests</h1>
+
+<div id="debug"></div>
+<script>
+    var debug = document.getElementById('debug');
+
+    function log(data) {
+        debug.innerHTML += data +'<br />';
+    }
+
+    window.onload = function () {
+        COUCHFRIENDS.connect();
+    };
+
+    COUCHFRIENDS.on('connect', function () {
+        log('Connected');
+        COUCHFRIENDS.send({topic:'game',action:'host'});
+    });
+
+    COUCHFRIENDS.on('error', function (errorMessage) {
+        log(errorMessage);
+    });
+</script>
+</body>
+</html>
