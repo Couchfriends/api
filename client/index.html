@@ -6,8 +6,7 @@
     <script src="../shared/couchfriends.js"></script>
 </head>
 <body>
-<h1>Client tests</h1>
-
+<h1>Game host</h1>
 <div id="debug"></div>
 <script>
     var debug = document.getElementById('debug');
@@ -18,6 +17,7 @@
 
     window.onload = function () {
         COUCHFRIENDS.connect();
+
     };
 
     COUCHFRIENDS.on('connect', function () {

@@ -22,17 +22,20 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-var COUCHFRIENDS = require('../shared/couchfriends');
-
 var WebSocketServer = require('ws').Server;
-var wss = new WebSocketServer({port: COUCHFRIENDS.settings.port});
+var wss = new WebSocketServer({port: 8080});
 
-var connections = COUCHFRIENDS.connections;
+var _defaultClient = {
+    id: 0,
+    connection: {}
+};
+
+var connections = [];
 
 wss.on('connection', function connection(ws) {
 
     ws.on('message', function(data) {
-        COUCHFRIENDS.onmessage({data: data});
+        console.log(data);
     });
 
     var client = JSON.parse(JSON.stringify(COUCHFRIENDS._defaultConnection));
