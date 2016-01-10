@@ -81,6 +81,16 @@
         COUCHFRIENDS.socketPeer.createOffer(function(offer) {
             COUCHFRIENDS.settings.peerOffer = offer;
             console.log(offer);
+                var data = {
+                    topic: 'identify',
+                    data: {
+                        peerSdp: offer.sdp
+                    }
+                };
+            COUCHFRIENDS.send(data);
+                if (typeof log == 'function') {
+                    log('Peer connection made. Updated info to server.');
+                }
             // Not sure what to do with this yet...
             //COUCHFRIENDS.socketPeer.setLocalDescription(new sessionDescription(offer), function() {
             //    console.log(offer);
