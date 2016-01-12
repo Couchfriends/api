@@ -96,7 +96,7 @@ var COUCHFRIENDS = {
             'optional': [{'DtlsSrtpKeyAgreement': true}, {'RtpDataChannels': true}]
         },
         peerDataChannelConfig: {
-            ordered: false,
+            ordered: true,
             reliable: false
         },
         sdpConstraints: {
@@ -127,7 +127,7 @@ COUCHFRIENDS.createPeerSocket = function (client) {
     connection.client = client;
 
     // @todo maybe need to change label to client/server to make two channels?
-    var dataChannel = connection.createDataChannel('messages',
+    var dataChannel = connection.createDataChannel('messages_' + client.id,
         COUCHFRIENDS.settings.peerDataChannelConfig
     );
     dataChannel.client = client;
@@ -144,37 +144,13 @@ COUCHFRIENDS.createPeerSocket = function (client) {
         this.client.connected = true;
     };
 
-    dataChannel.onclose = function () {
-        this.client.connected = false;
-        console.log('Peer connection closed.');
+    dataChannel.onclose = function (e) {
+        // @todo not sure, hij blijft gewoon via peer sturen
+        //this.client.connected = false;
+        //console.log('Peer connection closed.', this, e);
     };
 
-    connection.createOffer(
-        function (desc) {
-            connection.setLocalDescription(new sessionDescription(desc), function () {
-                var data = {
-                    topic: 'player',
-                    action: 'call',
-                    data: {
-                        // @todo make up your mind what ID to use...
-                        id: client.id,
-                        clientId: client.id,
-                        playerId: client.id,
-                        peerDescription: desc
-                    }
-                };
-                COUCHFRIENDS.send(data);
-                if (typeof log == 'function') {
-                    log('Peer offer created. Calling remote peer.');
-                    console.log(desc);
-                }
-            },
-            COUCHFRIENDS.error
-            );
-        },
-        COUCHFRIENDS.error,
-        COUCHFRIENDS.settings.sdpConstraints
-    );
+    connection.createOffer(onOffer.bind({id:client.id}), COUCHFRIENDS.error, COUCHFRIENDS.settings.sdpConstraints);
 
     connection.onicecandidate = function (event) {
         if (event.candidate) {
@@ -198,6 +174,7 @@ COUCHFRIENDS.createPeerSocket = function (client) {
         channel.onmessage = function (event) {
             var data = JSON.parse(event.data);
             data.id = this.client.id;
+            console.log('peer message received.', event);
             log('Peer message received.');
             COUCHFRIENDS.onmessage(data);
         };
@@ -206,6 +183,34 @@ COUCHFRIENDS.createPeerSocket = function (client) {
     client.connection = connection;
     return true;
 };
+
+function onOffer(localDesc) {
+    for (var i = 0; i < COUCHFRIENDS.connections.length; i++) {
+        var client = COUCHFRIENDS.connections[i];
+        if (client.id == this.id) {
+            client.connection.setLocalDescription(new sessionDescription(localDesc), function () {
+                    var data = {
+                        topic: 'player',
+                        action: 'call',
+                        data: {
+                            // @todo make up your mind what ID to use...
+                            id: client.id,
+                            clientId: client.id,
+                            playerId: client.id,
+                            peerDescription: localDesc
+                        }
+                    };
+                    COUCHFRIENDS.send(data);
+                    if (typeof log == 'function') {
+                        log('Peer offer created. Calling remote peer.');
+                    }
+                },
+                COUCHFRIENDS.error
+            );
+            return;
+        }
+    }
+}
 
 /**
  * Connects to the websocket server.
@@ -292,7 +297,19 @@ console.log('onmessage', data);
         callback += '.' + data.action;
     }
     if (data.id) {
-        data.data.clientId = data.id; // @todo fix.
+        if (callback == 'player.ice') {
+            // @todo fix this as well. blub
+            for (var i = 0; i < COUCHFRIENDS.connections.length; i++) {
+                var client = COUCHFRIENDS.connections[i];
+                if (client.id == data.id) {
+                    console.log('Setting ice', client, data.data);
+                    var candidate = JSON.parse(data.data);
+                    client.connection.addIceCandidate(new iceCandidate(candidate));
+                    return;
+                }
+            }
+            return;
+        }
     }
     COUCHFRIENDS.emit(callback, data.data);
 
