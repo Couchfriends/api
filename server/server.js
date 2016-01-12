@@ -174,6 +174,18 @@ wss.on('connection', function connection(ws) {
                     }
                     connection.send(JSON.stringify(jsonData));
                 }
+                else {
+                    // @todo fix this :) end post it to the default case.
+                    console.log('---------');
+                    console.log(client);
+                    console.log(message);
+                    if (client.identify.type == 'client') {
+                        // Send to host
+                        if (client.game.host != null) {
+                            client.game.host.connection.send(JSON.stringify(message));
+                        }
+                    }
+                }
             break;
             case 'identify':
                 client.identify = _.extend(client.identify, message.data);
@@ -190,6 +202,9 @@ wss.on('connection', function connection(ws) {
             break;
             default:
                 // @todo fix this :)
+                console.log('---------');
+                console.log(client);
+                console.log(message);
                 if (client.identify.type == 'client') {
                     // Send to host
                     if (client.game.host != null) {
