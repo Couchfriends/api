@@ -25,6 +25,10 @@
         COUCHFRIENDS.send({topic:'game',action:'host'});
     });
 
+    COUCHFRIENDS.on('message', function (data) {
+        console.log('message received.', data);
+    });
+
     COUCHFRIENDS.on('error', function (errorMessage) {
         log(errorMessage);
     });

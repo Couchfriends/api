@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="initial-scale=1, maximum-scale=1, user-scalable=no, width=device-width">
+    <title>Couchfriends</title>
+    <link rel="stylesheet" href="css/app.css"/>
+</head>
+<body>
+<a id="menu-button"><img src="img/menu.png"></a>
+
+<div id="menu" class="animated slideInDown">
+    <div id="menu-links"></div>
+    <span id="status">Disconnected</span>
+</div>
+<img src="img/logo-white.png" id="logo"/>
+
+<div id="form-join" class="form-container">
+    <div class="text-center">
+        <img src="img/logo-white.png" class="logo"/>
+    </div>
+    <div class="form-group">
+        <form method="post" onsubmit="app.joinGame();return false;">
+            <div class="input-group">
+                <input type="text" name="code" placeholder="Game code"
+                       id="input-code"/>
+            </div>
+            <div class="input-group">
+                <button type="submit">Join game</button>
+            </div>
+        </form>
+    </div>
+    <p class="text-right"><a onclick="app.UI.showForm('help');">Need help?</a></p>
+</div>
+<div id="form-login" class="form-container">
+    <div class="text-center">
+        <img src="img/logo-white.png" class="logo"/>
+    </div>
+    <div class="form-group">
+        <form method="post" onsubmit="app.login();return false;">
+            <div class="input-group">
+                <input type="email" name="email" id="login-email"
+                       placeholder="E-mail address"/>
+            </div>
+            <div class="input-group">
+                <input type="password" placeholder="Password" id="login-password" name="password"/>
+            </div>
+            <div class="input-group">
+                <button type="submit">Login</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div id="form-register" class="form-container">
+    <div class="text-center">
+        <img src="img/logo-white.png" class="logo"/>
+    </div>
+    <div class="form-group">
+        <form method="post" onsubmit="app.register();return false;">
+            <div class="input-group">
+                <input type="text" name="name" id="register-name"
+                       placeholder="Profile name"/>
+            </div>
+            <div class="input-group">
+                <input type="email" name="email" id="register-email"
+                       placeholder="E-mail address"/>
+            </div>
+            <div class="input-group">
+                <input type="password" placeholder="Password" id="register-password" name="password"/>
+            </div>
+            <div class="input-group">
+                <button type="submit">Register</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="form-help" class="form-container">
+    <div class="text-center">
+        <img src="img/logo-white.png" class="logo"/>
+    </div>
+    <h1>What is Couchfriends?</h1>
+    <p>With Couchfriends you can play games on TV and PC and use your phone as controller. Go to www.couchfriends.com with your TV or PC and start a game. You can join the game by entering the game code that is displayed on the screen.</p>
+    <button onclick="app.UI.showForm('join');">Play</button>
+</div>
+<script src="js/app.js"></script>
+</body>
+</html>

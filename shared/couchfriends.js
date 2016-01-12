@@ -9,237 +9,360 @@
  * For detailed information about the development with the Couchfriends API please visit http://couchfriends.com.
  * Please do not remove the header of this file.
  */
-(function() {
 
-    var peerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection ||
-        window.webkitRTCPeerConnection || window.msRTCPeerConnection;
-    var sessionDescription = window.RTCSessionDescription || window.mozRTCSessionDescription ||
-        window.webkitRTCSessionDescription || window.msRTCSessionDescription;
+var peerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection ||
+    window.webkitRTCPeerConnection || window.msRTCPeerConnection;
+var sessionDescription = window.RTCSessionDescription || window.mozRTCSessionDescription ||
+    window.webkitRTCSessionDescription || window.msRTCSessionDescription;
+var iceCandidate = window.webkitRTCIceCandidate || window.mozRTCIceCandidate || window.RTCIceCandidate;
 
+/**
+ * component/emitter
+ *
+ * Copyright (c) 2014 Component contributors <dev@component.io>
+ */
+function Emitter(a) {
+    return a ? mixin(a) : void 0
+}
+function mixin(a) {
+    for (var b in Emitter.prototype)a[b] = Emitter.prototype[b];
+    return a
+}
+Emitter.prototype.on = Emitter.prototype.addEventListener = function (a, b) {
+    return this._callbacks = this._callbacks || {}, (this._callbacks["$" + a] = this._callbacks["$" + a] || []).push(b), this
+}, Emitter.prototype.once = function (a, b) {
+    function c() {
+        this.off(a, c), b.apply(this, arguments)
+    }
+
+    return c.fn = b, this.on(a, c), this
+}, Emitter.prototype.off = Emitter.prototype.removeListener = Emitter.prototype.removeAllListeners = Emitter.prototype.removeEventListener = function (a, b) {
+    if (this._callbacks = this._callbacks || {}, 0 == arguments.length)return this._callbacks = {}, this;
+    var c = this._callbacks["$" + a];
+    if (!c)return this;
+    if (1 == arguments.length)return delete this._callbacks["$" + a], this;
+    for (var d, e = 0; e < c.length; e++)if (d = c[e], d === b || d.fn === b) {
+        c.splice(e, 1);
+        break
+    }
+    return this
+}, Emitter.prototype.emit = function (a) {
+    this._callbacks = this._callbacks || {};
+    var b = [].slice.call(arguments, 1), c = this._callbacks["$" + a];
+    if (c) {
+        c = c.slice(0);
+        for (var d = 0, e = c.length; e > d; ++d)c[d].apply(this, b)
+    }
+    return this
+}, Emitter.prototype.listeners = function (a) {
+    return this._callbacks = this._callbacks || {}, this._callbacks["$" + a] || []
+}, Emitter.prototype.hasListeners = function (a) {
+    return !!this.listeners(a).length
+};
+
+var COUCHFRIENDS = {
+    defaultClient: {
+        id: 0,
+        connected: false, // Whether peer connection available
+        connection: {}, // The peer connection
+        dataChannel: {}, // The peer dataChannel. This is used to send and receive data
+        identify: {
+            type: 'client',
+            name: 'New player',
+            color: '#ff9900'
+        }
+    },
     /**
-     * component/emitter
-     *
-     * Copyright (c) 2014 Component contributors <dev@component.io>
+     * List with all connected clients.
+     * @type {Array} list with all clients that have the following variables:
+     * @param id int the unique identifier of the client
+     * @param type string the type of connection: host|client
+     * @param player object all identify data for the player
+     * @param player.name string the name of the player
+     * @param player.color string the color of the player
+     * @param connection the Connection object for sending and receiving data
      */
-    function Emitter(a){return a?mixin(a):void 0}function mixin(a){for(var b in Emitter.prototype)a[b]=Emitter.prototype[b];return a}Emitter.prototype.on=Emitter.prototype.addEventListener=function(a,b){return this._callbacks=this._callbacks||{},(this._callbacks["$"+a]=this._callbacks["$"+a]||[]).push(b),this},Emitter.prototype.once=function(a,b){function c(){this.off(a,c),b.apply(this,arguments)}return c.fn=b,this.on(a,c),this},Emitter.prototype.off=Emitter.prototype.removeListener=Emitter.prototype.removeAllListeners=Emitter.prototype.removeEventListener=function(a,b){if(this._callbacks=this._callbacks||{},0==arguments.length)return this._callbacks={},this;var c=this._callbacks["$"+a];if(!c)return this;if(1==arguments.length)return delete this._callbacks["$"+a],this;for(var d,e=0;e<c.length;e++)if(d=c[e],d===b||d.fn===b){c.splice(e,1);break}return this},Emitter.prototype.emit=function(a){this._callbacks=this._callbacks||{};var b=[].slice.call(arguments,1),c=this._callbacks["$"+a];if(c){c=c.slice(0);for(var d=0,e=c.length;e>d;++d)c[d].apply(this,b)}return this},Emitter.prototype.listeners=function(a){return this._callbacks=this._callbacks||{},this._callbacks["$"+a]||[]},Emitter.prototype.hasListeners=function(a){return!!this.listeners(a).length};
-
-    var COUCHFRIENDS = {
-        _defaultPlayers: {
-            id: 0,
-            player: {
-                name: 'Guest',
-                color: '#ff9900'
-            },
-            connection: {},
-            host: {}
+    connections: [],
+    connected: false,
+    /**
+     * The websocket object
+     */
+    connection: {},
+    settings: {
+        host: 'ws://localhost',
+        port: 8080,
+        peerConfig: {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+        peerConnection: {
+            'optional': [{'DtlsSrtpKeyAgreement': true}, {'RtpDataChannels': true}]
         },
-        /**
-         * List with all connected devices; hosts and clients.
-         * @type {Array} list with all clients that have the following variables:
-         * @param id int the unique identifier of the client
-         * @param type string the type of connection: host|client
-         * @param player object all identify data for the player
-         * @param player.name string the name of the player
-         * @param player.color string the color of the player
-         * @param connection the Connection object for sending and receiving data
-         */
-        players: [],
-        socketConnected: false,
-        peerConnected: false,
-        /**
-         * The websocket object
-         */
-        socket: {},
-        /**
-         * The peer object
-         */
-        socketPeer: {},
-        /**
-         * Object where data is through transmitted.
-         */
-        peerDataChannel: {},
-        settings: {
-            peerOffer: {},
-            host: 'ws://localhost',
-            port: 8080
+        peerDataChannelConfig: {
+            ordered: false,
+            reliable: false
+        },
+        sdpConstraints: {
+            'offerToReceiveAudio': false,
+            'offerToReceiveVideo': false
         }
+    }
+};
+
+COUCHFRIENDS.error = function (error) {
+    COUCHFRIENDS.emit('error', error);
+};
+
+/**
+ * Creates a peer socket connection and calls the remote peer (client)
+ * @returns {boolean} whether a peer connection can be established.
+ */
+COUCHFRIENDS.createPeerSocket = function (client) {
+
+    if (typeof peerConnection == 'undefined') {
+        COUCHFRIENDS.emit('error', 'Peer connection not available.');
+        return false;
+    }
+    var connection = new peerConnection(
+        COUCHFRIENDS.settings.peerConfig,
+        COUCHFRIENDS.settings.peerConnection
+    );
+    connection.client = client;
+
+    // @todo maybe need to change label to client/server to make two channels?
+    var dataChannel = connection.createDataChannel('messages',
+        COUCHFRIENDS.settings.peerDataChannelConfig
+    );
+    dataChannel.client = client;
+    dataChannel.onerror = function (error) {
+        COUCHFRIENDS.emit('error', 'Data channel error: ' + error);
     };
 
-    COUCHFRIENDS.foo = function foo() {
-        console.log('fooed');
+    dataChannel.onmessage = function (event) {
+        console.log("Got Data Channel Message:", event.data, this.client);
     };
 
-    COUCHFRIENDS._connectPeersocket = function() {
+    dataChannel.onopen = function () {
+        console.log('Peer is open for data messages!');
+        this.client.connected = true;
+    };
 
-        if (typeof peerConnection == 'undefined') {
-            COUCHFRIENDS.emit('error', 'Peer connection not available.');
-            return false;
-        }
-        COUCHFRIENDS.socketPeer = new peerConnection({});
-        COUCHFRIENDS.peerDataChannel = COUCHFRIENDS.socketPeer.createDataChannel('Couchfriends');
-        console.log(COUCHFRIENDS.socketPeer);
-        COUCHFRIENDS.socketPeer.createOffer(function(offer) {
-            COUCHFRIENDS.settings.peerOffer = offer;
-            console.log(offer);
+    dataChannel.onclose = function () {
+        this.client.connected = false;
+        console.log('Peer connection closed.');
+    };
+
+    connection.createOffer(
+        function (desc) {
+            connection.setLocalDescription(new sessionDescription(desc), function () {
                 var data = {
-                    topic: 'identify',
+                    topic: 'player',
+                    action: 'call',
                     data: {
-                        peerSdp: offer.sdp
+                        // @todo make up your mind what ID to use...
+                        id: client.id,
+                        clientId: client.id,
+                        playerId: client.id,
+                        peerDescription: desc
                     }
                 };
-            COUCHFRIENDS.send(data);
+                COUCHFRIENDS.send(data);
                 if (typeof log == 'function') {
-                    log('Peer connection made. Updated info to server.');
+                    log('Peer offer created. Calling remote peer.');
+                    console.log(desc);
                 }
-            // Not sure what to do with this yet...
-            //COUCHFRIENDS.socketPeer.setLocalDescription(new sessionDescription(offer), function() {
-            //    console.log(offer);
-            //});
+            },
+            COUCHFRIENDS.error
+            );
         },
-        function (error) {
-            COUCHFRIENDS.emit('error', error);
-        });
-        //this.socketPeer.createDataChannel('Couchfriends', {
-        //    ordered: false
-        //});
+        COUCHFRIENDS.error,
+        COUCHFRIENDS.settings.sdpConstraints
+    );
 
-        COUCHFRIENDS.socketPeer.onerror = function (error) {
-            COUCHFRIENDS.emit('error', 'Data channel error: ' + error);
-        };
+    connection.onicecandidate = function (event) {
+        if (event.candidate) {
+            console.log('Client exists?', event);
+            var jsonData = {
+                topic: 'player', // @todo make peer
+                action: 'ice',
+                id: this.client.id,
+                // @todo set peer data in deeper variable
+                data: JSON.stringify(event.candidate)
+            };
+            COUCHFRIENDS.send(jsonData);
+        }
+    };
 
-        COUCHFRIENDS.socketPeer.onmessage = function (event) {
-            console.log("Got Data Channel Message:", event.data);
-        };
-
-        COUCHFRIENDS.socketPeer.onopen = function () {
-            console.log('Peer is open for connections.');
-            COUCHFRIENDS.peerConnected = true;
-        };
-
-        COUCHFRIENDS.socketPeer.onclose = function () {
-            console.log('Peer connection closed.');
-            COUCHFRIENDS.peerConnected = false;
+    client.dataChannel = dataChannel;
+    connection.ondatachannel = function (event) {
+        var client = this.client;
+        var channel = event.channel;
+        channel.client = client;
+        channel.onmessage = function (event) {
+            var data = JSON.parse(event.data);
+            data.id = this.client.id;
+            log('Peer message received.');
+            COUCHFRIENDS.onmessage(data);
         };
     };
 
-    /**
-     * Connects to the websocket server.
-     * @returns {boolean} Returns false on errors or true if device will connect.
-     *
-     * @throws error on('error') will be emitted on error.
-     */
-    COUCHFRIENDS.connect = function() {
+    client.connection = connection;
+    return true;
+};
 
-        if (typeof WebSocket == 'undefined') {
-            COUCHFRIENDS.emit('error', 'Websockets are not supported by this device.');
-            return false;
-        }
+/**
+ * Connects to the websocket server.
+ * @returns {boolean} Returns false on errors or true if device will connect.
+ *
+ * @throws error on('error') will be emitted on error.
+ */
+COUCHFRIENDS.connect = function () {
 
-        if (this.socketConnected == true) {
-            return true;
-        }
+    if (typeof WebSocket == 'undefined') {
+        COUCHFRIENDS.emit('error', 'Websockets are not supported by this device.');
+        return false;
+    }
 
-        var socket = new WebSocket(this.settings.host +':'+this.settings.port);
+    if (this.connected == true) {
+        return true;
+    }
 
-        socket.onmessage = COUCHFRIENDS.onmessage.bind(socket);
+    var connection = new WebSocket(this.settings.host + ':' + this.settings.port);
 
-        socket.onopen = function() {
-            COUCHFRIENDS.socketConnected = true;
-            COUCHFRIENDS._connectPeersocket();
-            COUCHFRIENDS.emit('connect');
-        };
-
-        socket.onclose = function() {
-            COUCHFRIENDS.socketConnected = false;
-            COUCHFRIENDS.emit('disconnect');
-        };
-
-        socket.onerror = function(error) {
-            console.log(error);
-            COUCHFRIENDS.emit('error', 'Unknown Websocket error.');
-        };
-
-        this.socket = socket;
-
+    connection.onmessage = function (event) {
+        var data = JSON.parse(event.data);
+        log('Websocket message received.');
+        COUCHFRIENDS.onmessage(data);
     };
 
-    COUCHFRIENDS.send = function (data) {
+    connection.onopen = function () {
+        COUCHFRIENDS.connected = true;
+        COUCHFRIENDS.emit('connect');
+    };
 
-        if (this.peerConnected == true && data.playerId) {
-            // Search for playerId
-            for (var i = 0; i < this.players.length; i++) {
-                var player = this.players[i];
-                if (player.id != data.playerId) {
-                    continue;
-                }
-                if (player.peerConnected == true) {
-                    // Send through peer.
-                    // Something like:
-                    // @see https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection#createDataChannel
-                    // player.peerConnection.send();
-                }
+    connection.onclose = function () {
+        COUCHFRIENDS.connected = false;
+        COUCHFRIENDS.emit('disconnect');
+    };
+
+    connection.onerror = function (error) {
+        console.log(error);
+        COUCHFRIENDS.emit('error', 'Unknown Websocket error.');
+    };
+
+    this.connection = connection;
+
+};
+
+COUCHFRIENDS.send = function (data) {
+
+    if (data.playerId) {
+        // Search for playerId
+        for (var i = 0; i < this.connections.length; i++) {
+            var player = this.connections[i];
+            if (player.id != data.playerId) {
+                continue;
+            }
+            if (player.connected == true) {
+                // Send through peer.
+                // @link https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection#Example_5
+                console.log('Sending data through peer.', data);
+                player.dataChannel.send(JSON.stringify(data));
+                return true;
             }
         }
-        if (this.socketConnected == true) {
-            // Send through websocket connection
-            COUCHFRIENDS.socket.send(JSON.stringify(data));
+    }
+    if (this.connected == true) {
+        // Send through websocket connection
+        COUCHFRIENDS.connection.send(JSON.stringify(data));
+        return true;
+    }
+    COUCHFRIENDS.emit('error', 'Message not sent. Not connected.');
+    return false;
+};
+
+/**
+ * Received a message from the websocket server or one of it's peers.
+ * @param event object
+ */
+COUCHFRIENDS.onmessage = function (data) {
+console.log('onmessage', data);
+    var callback = '';
+    if (data.topic != null) {
+        callback = data.topic;
+    }
+    if (data.action != null) {
+        callback += '.' + data.action;
+    }
+    if (data.id) {
+        data.data.clientId = data.id; // @todo fix.
+    }
+    COUCHFRIENDS.emit(callback, data.data);
+
+};
+
+Emitter(COUCHFRIENDS);
+
+COUCHFRIENDS.on('game.start', function (data) {
+    log ('Hosting a new game with code: ' + data.code);
+    console.log('New hosting game.', data);
+});
+
+COUCHFRIENDS.on('player.join', function (data) {
+    console.log('Player joined', data);
+    var client = JSON.parse(JSON.stringify(COUCHFRIENDS.defaultClient));
+    client.id = data.id;
+    COUCHFRIENDS.createPeerSocket(client);
+    COUCHFRIENDS.connections.push(client);
+});
+
+// @todo move to peer.callback
+COUCHFRIENDS.on('player.ice', function (data) {
+    console.log('Ice server', data);
+    for (var i = 0; i < COUCHFRIENDS.connections.length; i++) {
+        var client = COUCHFRIENDS.connections[i];
+        if (client.id == data.id) {
+            console.log('Setting ice', client, data);
+            var candidate = JSON.parse(data);
+            client.connection.addIceCandidate(new iceCandidate(candidate));
+            return;
+        }
+    }
+});
+
+/**
+ * Callback when a client answered the peer call/offer.
+ */
+COUCHFRIENDS.on('player.answer', function (data) {
+    console.log('Peer has answered my call!', data);
+    for (var i = 0; i < COUCHFRIENDS.connections.length; i++) {
+        var client = COUCHFRIENDS.connections[i];
+        // @todo fix id or make up what id to use.
+        if (client.id == data.id) {
+            var answer = data;
+            console.log(answer, client);
+            client.connection.setRemoteDescription(new sessionDescription(answer),
+                function () {
+                    log('Peer connection made! ID ' + client.id);
+                    client.connected = true;
+                }, function (error) {
+                    console.log(error);
+                });
             return true;
         }
-        COUCHFRIENDS.emit('error', 'Message not sent. Not connected.');
-        return false;
-    };
+    }
 
-    /**
-     * Received a message from the websocket server or one of it's peers.
-     * @param event object
-     */
-    COUCHFRIENDS.onmessage = function (event) {
-        var obj = {};
-        try {
-            obj = JSON.parse(event.data);
-        }
-        catch (e) {
-            COUCHFRIENDS.emit('error', 'Expected JSON-formatted message.');
-            return false;
-        }
-        var callback = '';
-        if (obj.topic != null) {
-            callback = obj.topic;
-        }
-        if (obj.action != null) {
-            callback += '.' + obj.action;
-        }
-        if (callback != '') {
-            return COUCHFRIENDS.emit(callback, obj.data);
-        }
-        COUCHFRIENDS.emit('data', obj);
+});
 
-    };
+/**
+ * Callback when an application error happened.
+ * @param error string Message with error information.
+ */
+COUCHFRIENDS.on('error', function (error) {
+    error = error || 'Unknown error.';
+    console.log('> Error: ', error);
+});
 
-    Emitter(COUCHFRIENDS);
-
-    COUCHFRIENDS.on('game.host', function(data) {
-        console.log('New hosting game.', data);
-    });
-
-    /**
-     * Callback when an application error happened.
-     * @param error string Message with error information.
-     */
-    COUCHFRIENDS.on('error', function(error) {
-        error = error || 'Unknown error.';
-        console.log('> Error: ', error);
-    });
-
-    /**
-     * Data received from server/client
-     */
-    COUCHFRIENDS.on('data', function (data) {
-        console.log('> Received data.', data);
-    });
-
-    if (typeof module !== 'undefined' && typeof module.exports !== 'undefined')
-        module.exports = COUCHFRIENDS;
-    else
-        window.COUCHFRIENDS = COUCHFRIENDS;
-})();
+/**
+ * Data received from server/client
+ */
+COUCHFRIENDS.on('data', function (data) {
+    console.log('> Received data.', data);
+});
